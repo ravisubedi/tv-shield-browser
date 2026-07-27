@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Message;
 import android.content.SharedPreferences;
 import android.util.DisplayMetrics;
 import android.view.KeyEvent;
@@ -156,6 +157,8 @@ public final class MainActivity extends Activity {
         settings.setTextZoom(90);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setDatabaseEnabled(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
         // Keep WebView's real Android/codec identity. Pretending to be desktop
         // Chrome can make video sites select streams the TV cannot decode well.
         settings.setUserAgentString(settings.getUserAgentString() + " TVShield/0.2.2");
@@ -184,8 +187,24 @@ public final class MainActivity extends Activity {
             @Override public void onHideCustomView() {
                 hideCustomVideo();
             }
+            @Override public boolean onCreateWindow(WebView view, boolean isDialog,
+                                                     boolean isUserGesture, Message resultMsg) {
+                // This browser has no tab model. Refuse popup and pop-under
+                // windows instead of allowing ad scripts to hijack navigation.
+                return false;
+            }
         });
         webView.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (!shieldEnabled || !request.isForMainFrame()) return false;
+                Uri destination = request.getUrl();
+                String scheme = destination.getScheme();
+                if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) return true;
+                Uri current = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
+                if (!isCrossSite(current, destination)) return false;
+                Toast.makeText(MainActivity.this, "Shield blocked a cross-site redirect", Toast.LENGTH_SHORT).show();
+                return true;
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 // Video segments are already selected by the player. Never make
                 // them wait on cosmetic/ad-filter logic.
@@ -207,6 +226,7 @@ public final class MainActivity extends Activity {
                 applyResolutionViewport(url);
                 applyUserZoom();
                 installTvFocusStyle();
+                installShieldHelpers();
                 installYouTubeHelpers(url);
             }
         });
@@ -349,6 +369,17 @@ public final class MainActivity extends Activity {
                 || host.endsWith(".vimeocdn.com");
     }
 
+    private boolean isCrossSite(Uri current, Uri destination) {
+        String currentHost = current.getHost();
+        String destinationHost = destination.getHost();
+        if (currentHost == null || destinationHost == null) return false;
+        currentHost = currentHost.toLowerCase(java.util.Locale.US);
+        destinationHost = destinationHost.toLowerCase(java.util.Locale.US);
+        return !(currentHost.equals(destinationHost)
+                || currentHost.endsWith("." + destinationHost)
+                || destinationHost.endsWith("." + currentHost));
+    }
+
     private void applyResolutionViewport(String url) {
         Uri uri = Uri.parse(url);
         String host = uri.getHost();
@@ -460,6 +491,20 @@ public final class MainActivity extends Activity {
                 "s.textContent='a:focus,button:focus,input:focus,select:focus,textarea:focus,[role=button]:focus,[tabindex]:focus{" +
                 "outline:5px solid #FB542B!important;outline-offset:3px!important;box-shadow:0 0 0 3px white!important}';" +
                 "document.documentElement.appendChild(s)})()", null);
+    }
+
+    private void installShieldHelpers() {
+        if (!shieldEnabled) return;
+        String script = "(function(){if(window.__tvShieldPage)return;window.__tvShieldPage=true;" +
+                "try{window.open=function(){return null}}catch(e){};" +
+                "var clean=function(root){root=root&&root.querySelectorAll?root:document;" +
+                "root.querySelectorAll('[class*=\\\"popup\\\" i],[class*=\\\"popunder\\\" i]," +
+                "[id*=\\\"popup\\\" i],[id*=\\\"popunder\\\" i]," +
+                "iframe[src*=\\\"teleibelock\\\"],script[src*=\\\"teleibelock\\\"]').forEach(function(e){e.remove()});" +
+                "root.querySelectorAll('a[target=\\\"_blank\\\"]').forEach(function(a){a.removeAttribute('target')})};" +
+                "clean(document);var timer=0;new MutationObserver(function(){if(timer)return;timer=setTimeout(function(){" +
+                "timer=0;clean(document)},250)}).observe(document.documentElement,{childList:true,subtree:true})})()";
+        webView.evaluateJavascript(script, null);
     }
 
     private void movePageFocus(boolean forward) {
