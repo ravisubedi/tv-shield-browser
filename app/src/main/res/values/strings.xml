@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">TV Shield</string>
+    <string name="address_hint">Search or enter address</string>
+    <string name="go">Go</string>
+    <string name="back">Back</string>
+    <string name="forward">Forward</string>
+    <string name="home">Home</string>
+    <string name="shield_on">Shield ON</string>
+    <string name="shield_off">Shield OFF</string>
+    <string name="full_screen">Full Screen</string>
+    <string name="exit_full_screen">Exit Full Screen</string>
+    <string name="zoom">Zoom</string>
+    <string name="add_bookmark">Add bookmark</string>
+    <string name="remove_bookmark">Remove bookmark</string>
+    <string name="bookmark_added">Bookmark added</string>
+    <string name="bookmark_removed">Bookmark removed</string>
+    <string name="clear_address">Clear address</string>
+    <string name="browser_menu">Browser menu</string>
+</resources>

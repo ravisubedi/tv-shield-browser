@@ -1,0 +1,5 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="rectangle"><solid android:color="#0B1220"/><corners android:radius="12dp"/></shape></item>
+    <item android:width="124dp" android:height="124dp" android:gravity="center"
+        android:drawable="@drawable/ic_launcher" />
+</layer-list>

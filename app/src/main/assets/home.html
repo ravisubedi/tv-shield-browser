@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TV Shield Home</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#15233b 0,#0b1220 42%);color:#f8fafc;font:20px system-ui,sans-serif;min-height:100vh;padding:24px 48px 40px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:14px}.brand-mark{width:50px;height:50px;flex:none}
+    h1{font-size:32px;margin:0;line-height:1}p{color:#afc0d6;margin:4px 0 0;font-size:17px}
+    form{display:flex;gap:14px;margin-bottom:18px;max-width:1500px}input{flex:1;height:56px;border:3px solid transparent;border-radius:16px;padding:0 20px;font-size:22px}button{height:56px;border:0;border-radius:14px;padding:0 28px;background:#ff6a3d;color:#111827;font-size:20px;font-weight:750}
+    section{margin-bottom:18px}h2{font-size:25px;margin:0 0 10px}.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+    a{display:flex;align-items:center;justify-content:center;height:80px;padding:12px;border-radius:16px;background:#1d2b42;color:#f8fafc;text-decoration:none;font-weight:700;border:3px solid transparent;box-shadow:inset 0 0 0 1px #2b3c57;overflow:hidden}
+    a:focus-visible,input:focus-visible,button:focus-visible{outline:4px solid #fff;outline-offset:2px;border-color:#ff6a3d;box-shadow:0 0 0 5px #ff6a3d;transform:scale(1.03);transition:transform 120ms}
+    a:hover{background:#263751}.dynamic:empty{display:none}.tile-wrap{position:relative;min-width:0}.tile-wrap a{padding-right:48px;text-align:center}.remove{position:absolute;right:8px;top:19px;width:48px;height:48px;padding:0;border-radius:12px;font-size:24px;background:#7f1d2d;color:white;z-index:2}
+    .count{display:block;font-size:17px;color:#afc0d6;margin-top:4px}.label{text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:1599px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:1049px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+  <header>
+    <svg class="brand-mark" viewBox="0 0 108 108" aria-hidden="true">
+      <path fill="#ff6a3d" d="M54 12 88 25 84 67Q79 88 54 98 29 88 24 67L20 25Z"/>
+      <path fill="#152033" d="M54 22 78 31 75 64Q71 79 54 87 37 79 33 64L30 31Z"/>
+      <path fill="#fff" d="M48 62 67 35 60 57 72 54Z"/><path fill="#ff6a3d" d="M60 47 41 74 48 52 36 55Z"/>
+    </svg>
+    <div><h1>TV Shield</h1><p>Browse comfortably with tracker protection</p></div>
+  </header>
+  <form action="https://search.brave.com/search" method="get"><input name="q" aria-label="Search" placeholder="Search the web"><button type="submit">Search</button></form>
+  <section id="bookmarksSection" hidden><h2>Bookmarks</h2><div id="bookmarks" class="grid dynamic"></div></section>
+  <section id="visitedSection" hidden><h2>Most visited</h2><div id="mostVisited" class="grid dynamic"></div></section>
+  <section><h2>Popular websites</h2>
+  <main class="grid">
+    <a class="google" href="https://www.google.com">Google</a>
+    <a class="youtube" href="https://www.youtube.com">YouTube</a>
+    <a class="wikipedia" href="https://www.wikipedia.org">Wikipedia</a>
+    <a class="amazon" href="https://www.amazon.com">Amazon</a>
+    <a class="reddit" href="https://www.reddit.com">Reddit</a>
+    <a class="weather" href="https://weather.com">Weather</a>
+    <a class="news" href="https://news.google.com">Google News</a>
+    <a class="speed" href="https://fast.com">Speed Test</a>
+  </main></section>
+  <script>
+    function makeLink(item, showCount) {
+      const a=document.createElement('a'); a.href=item.url;
+      const label=document.createElement('span'); label.className='label';
+      label.textContent=item.title || new URL(item.url).hostname;
+      if(showCount){const c=document.createElement('span');c.className='count';c.textContent=item.count+' '+(item.count===1?'visit':'visits');label.appendChild(c)}
+      a.appendChild(label); return a;
+    }
+    function renderBrowserData(bookmarks, visited) {
+      const b=document.getElementById('bookmarks'); b.replaceChildren();
+      bookmarks.forEach(item=>{const wrap=document.createElement('div');wrap.className='tile-wrap';wrap.appendChild(makeLink(item,false));
+        const remove=document.createElement('button');remove.className='remove';remove.textContent='×';remove.title='Remove bookmark';
+        remove.onclick=()=>window.BrowserBridge.removeBookmark(item.url);wrap.appendChild(remove);b.appendChild(wrap)});
+      document.getElementById('bookmarksSection').hidden=!bookmarks.length;
+      const v=document.getElementById('mostVisited'); v.replaceChildren();visited.forEach(item=>v.appendChild(makeLink(item,true)));
+      document.getElementById('visitedSection').hidden=!visited.length;
+    }
+  </script>
+</body>
+</html>

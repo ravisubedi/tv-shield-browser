@@ -1,0 +1,19 @@
+# One hostname per line. Subdomains are blocked automatically.
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+adservice.google.com
+amazon-adsystem.com
+adsrvr.org
+adnxs.com
+criteo.com
+criteo.net
+taboola.com
+outbrain.com
+scorecardresearch.com
+hotjar.com
+quantserve.com
+segment.io
+mixpanel.com
+branch.io
+appsflyer.com
