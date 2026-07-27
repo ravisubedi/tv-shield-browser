@@ -533,7 +533,7 @@ public final class MainActivity extends Activity {
                 "var e=Array.from(document.querySelectorAll(q)).filter(function(x){var r=x.getBoundingClientRect();" +
                 "return !x.disabled&&r.width>0&&r.height>0&&getComputedStyle(x).visibility!==\"hidden\"});" +
                 "if(!e.length)return;var i=e.indexOf(document.activeElement);i=(i+" + direction + "+e.length)%e.length;" +
-                "e[i].focus({preventScroll:true});e[i].scrollIntoView({block:'center',inline:'center',behavior:'smooth'})})()";
+                "e[i].focus({preventScroll:true});e[i].scrollIntoView({block:'center',inline:'center',behavior:'auto'})})()";
         webView.evaluateJavascript(script, null);
     }
 
@@ -566,7 +566,9 @@ public final class MainActivity extends Activity {
     }
 
     private void scrollPage(int pixels) {
-        webView.evaluateJavascript("window.scrollBy({top:" + pixels + ",left:0,behavior:'smooth'})", null);
+        // Native scrolling avoids stacking JavaScript smooth-scroll animations
+        // when a mouse wheel or remote sends events in quick succession.
+        webView.scrollBy(0, pixels);
     }
 
     private void scrollUpOrRevealToolbar() {
