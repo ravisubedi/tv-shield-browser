@@ -21,6 +21,16 @@ TV Shield is a lightweight browser designed for Android TV and Google TV. It com
 - Android SDK 35
 - Android TV or Google TV running Android 6.0 (API 23) or newer
 
+## Install with Downloader
+
+1. Install and open **Downloader by AFTVnews** on the TV.
+2. Enter code **4671706** and select **Go**.
+3. Install `TVShieldBrowser-v0.2.6-release.apk` when prompted.
+
+Short URL: [aftv.news/4671706](https://aftv.news/4671706)
+
+If Android blocks the installation, allow Downloader under **Settings → Apps → Special app access → Install unknown apps**, then retry.
+
 ## Build
 
 ```sh
