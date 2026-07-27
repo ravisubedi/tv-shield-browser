@@ -182,6 +182,12 @@ public final class MainActivity extends Activity {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 findViewById(android.R.id.content).setVisibility(View.GONE);
                 applyImmersiveMode(true);
+                view.setFocusable(true);
+                view.setFocusableInTouchMode(true);
+                view.setOnTouchListener((videoView, event) -> {
+                    mouseGestureDetector.onTouchEvent(event);
+                    return false;
+                });
                 view.requestFocus();
             }
             @Override public void onHideCustomView() {
@@ -505,6 +511,17 @@ public final class MainActivity extends Activity {
         webView.requestFocus();
     }
 
+    private void toggleVideoPlayback() {
+        webView.evaluateJavascript("(function(){var v=document.querySelector('video');" +
+                "if(!v)return;if(v.paused)v.play();else v.pause()})()", null);
+    }
+
+    private void seekVideo(int seconds) {
+        webView.evaluateJavascript("(function(){var v=document.querySelector('video');" +
+                "if(!v)return;v.currentTime=Math.max(0,Math.min(v.duration||Infinity,v.currentTime+"
+                + seconds + "))})()", null);
+    }
+
     private void installTvFocusStyle() {
         webView.evaluateJavascript("(function(){if(document.getElementById('__tvshield_style'))return;" +
                 "var s=document.createElement('style');s.id='__tvshield_style';" +
@@ -616,6 +633,29 @@ public final class MainActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (customVideoView != null) {
+                switch (event.getKeyCode()) {
+                    case KeyEvent.KEYCODE_DPAD_CENTER:
+                    case KeyEvent.KEYCODE_ENTER:
+                    case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                        toggleVideoPlayback();
+                        return true;
+                    case KeyEvent.KEYCODE_MEDIA_PLAY:
+                        webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.play()})()", null);
+                        return true;
+                    case KeyEvent.KEYCODE_MEDIA_PAUSE:
+                        webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.pause()})()", null);
+                        return true;
+                    case KeyEvent.KEYCODE_DPAD_LEFT:
+                    case KeyEvent.KEYCODE_MEDIA_REWIND:
+                        seekVideo(-10);
+                        return true;
+                    case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                        seekVideo(10);
+                        return true;
+                }
+            }
             if (event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
                 toggleFullScreen();
                 return true;
