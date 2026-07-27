@@ -201,10 +201,16 @@ public final class MainActivity extends Activity {
                 Uri destination = request.getUrl();
                 String scheme = destination.getScheme();
                 if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) return true;
+                AdBlocker.BlockType destinationType = adBlocker.getBlockType(destination);
+                if (destinationType != AdBlocker.BlockType.NONE) {
+                    recordBlock(destinationType);
+                    Toast.makeText(MainActivity.this, "Shield blocked an ad link", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 Uri current = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
-                if (!isCrossSite(current, destination)) return false;
+                if (!isCrossSite(current, destination) || request.hasGesture()) return false;
                 recordBlock(AdBlocker.BlockType.AD);
-                Toast.makeText(MainActivity.this, "Shield blocked a cross-site redirect", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "Shield blocked an automatic redirect", Toast.LENGTH_SHORT).show();
                 return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
