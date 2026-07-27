@@ -191,6 +191,7 @@ public final class MainActivity extends Activity {
                                                      boolean isUserGesture, Message resultMsg) {
                 // This browser has no tab model. Refuse popup and pop-under
                 // windows instead of allowing ad scripts to hijack navigation.
+                if (shieldEnabled) recordBlock(AdBlocker.BlockType.AD);
                 return false;
             }
         });
@@ -202,6 +203,7 @@ public final class MainActivity extends Activity {
                 if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) return true;
                 Uri current = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
                 if (!isCrossSite(current, destination)) return false;
+                recordBlock(AdBlocker.BlockType.AD);
                 Toast.makeText(MainActivity.this, "Shield blocked a cross-site redirect", Toast.LENGTH_SHORT).show();
                 return true;
             }
@@ -209,7 +211,10 @@ public final class MainActivity extends Activity {
                 // Video segments are already selected by the player. Never make
                 // them wait on cosmetic/ad-filter logic.
                 if (isMediaDeliveryRequest(request.getUrl())) return null;
-                if (shieldEnabled && adBlocker.shouldBlock(request.getUrl())) {
+                AdBlocker.BlockType blockType = shieldEnabled
+                        ? adBlocker.getBlockType(request.getUrl()) : AdBlocker.BlockType.NONE;
+                if (blockType != AdBlocker.BlockType.NONE) {
+                    recordBlock(blockType);
                     return new WebResourceResponse("text/plain", "UTF-8",
                             new ByteArrayInputStream(new byte[0]));
                 }
@@ -343,8 +348,17 @@ public final class MainActivity extends Activity {
     }
 
     private void renderHomeData() {
-        String script = "renderBrowserData(" + readBookmarks().toString() + "," + mostVisited().toString() + ")";
+        String stats = "{ads:" + browserData.getLong("blocked_ads", 0)
+                + ",trackers:" + browserData.getLong("blocked_trackers", 0) + "}";
+        String script = "renderBrowserData(" + readBookmarks().toString() + ","
+                + mostVisited().toString() + "," + stats + ")";
         webView.evaluateJavascript(script, null);
+    }
+
+    private synchronized void recordBlock(AdBlocker.BlockType type) {
+        if (type == AdBlocker.BlockType.NONE) return;
+        String key = type == AdBlocker.BlockType.TRACKER ? "blocked_trackers" : "blocked_ads";
+        browserData.edit().putLong(key, browserData.getLong(key, 0) + 1).apply();
     }
 
     private final class BrowserBridge {

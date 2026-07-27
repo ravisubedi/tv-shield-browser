@@ -10,6 +10,7 @@
     h1{font-size:32px;margin:0;line-height:1}p{color:#afc0d6;margin:4px 0 0;font-size:17px}
     form{display:flex;gap:14px;margin-bottom:18px;max-width:1500px}input{flex:1;height:56px;border:3px solid transparent;border-radius:16px;padding:0 20px;font-size:22px}button{height:56px;border:0;border-radius:14px;padding:0 28px;background:#ff6a3d;color:#111827;font-size:20px;font-weight:750}
     section{margin-bottom:18px}h2{font-size:25px;margin:0 0 10px}.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+    .stats{display:grid;grid-template-columns:repeat(2,minmax(0,280px));gap:16px}.stat{display:flex;align-items:center;gap:16px;min-height:74px;padding:12px 18px;border-radius:16px;background:#14233a;border:1px solid #2b3c57}.stat-number{font-size:32px;font-weight:800;color:#ff6a3d;min-width:62px}.stat-label{font-size:17px;color:#c7d4e6;font-weight:700}
     a{display:flex;align-items:center;justify-content:center;height:80px;padding:12px;border-radius:16px;background:#1d2b42;color:#f8fafc;text-decoration:none;font-weight:700;border:3px solid transparent;box-shadow:inset 0 0 0 1px #2b3c57;overflow:hidden}
     a:focus-visible,input:focus-visible,button:focus-visible{outline:4px solid #fff;outline-offset:2px;border-color:#ff6a3d;box-shadow:0 0 0 5px #ff6a3d;transform:scale(1.03);transition:transform 120ms}
     a:hover{background:#263751}.dynamic:empty{display:none}.tile-wrap{position:relative;min-width:0}.tile-wrap a{padding-right:48px;text-align:center}.remove{position:absolute;right:8px;top:19px;width:48px;height:48px;padding:0;border-radius:12px;font-size:24px;background:#7f1d2d;color:white;z-index:2}
@@ -27,6 +28,10 @@
     <div><h1>TV Shield</h1><p>Browse comfortably with tracker protection</p></div>
   </header>
   <form action="https://search.brave.com/search" method="get"><input name="q" aria-label="Search" placeholder="Search the web"><button type="submit">Search</button></form>
+  <section aria-label="Protection totals"><div class="stats">
+    <div class="stat"><span id="adsBlocked" class="stat-number">0</span><span class="stat-label">Ads blocked</span></div>
+    <div class="stat"><span id="trackersBlocked" class="stat-number">0</span><span class="stat-label">Trackers blocked</span></div>
+  </div></section>
   <section id="bookmarksSection" hidden><h2>Bookmarks</h2><div id="bookmarks" class="grid dynamic"></div></section>
   <section id="visitedSection" hidden><h2>Most visited</h2><div id="mostVisited" class="grid dynamic"></div></section>
   <section><h2>Popular websites</h2>
@@ -48,7 +53,9 @@
       if(showCount){const c=document.createElement('span');c.className='count';c.textContent=item.count+' '+(item.count===1?'visit':'visits');label.appendChild(c)}
       a.appendChild(label); return a;
     }
-    function renderBrowserData(bookmarks, visited) {
+    function renderBrowserData(bookmarks, visited, stats) {
+      document.getElementById('adsBlocked').textContent=(stats&&stats.ads||0).toLocaleString();
+      document.getElementById('trackersBlocked').textContent=(stats&&stats.trackers||0).toLocaleString();
       const b=document.getElementById('bookmarks'); b.replaceChildren();
       bookmarks.forEach(item=>{const wrap=document.createElement('div');wrap.className='tile-wrap';wrap.appendChild(makeLink(item,false));
         const remove=document.createElement('button');remove.className='remove';remove.textContent='×';remove.title='Remove bookmark';
