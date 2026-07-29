@@ -4,12 +4,15 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.content.SharedPreferences;
 import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -29,6 +32,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.Toast;
 import org.json.JSONArray;
@@ -53,7 +57,13 @@ public final class MainActivity extends Activity {
     private boolean shieldEnabled = true;
     private boolean fullScreen = false;
     private View customVideoView;
+    private LinearLayout fullscreenControls;
+    private Button fullscreenPlayButton;
     private WebChromeClient.CustomViewCallback customVideoCallback;
+    private final Handler controlsHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideControls = () -> {
+        if (fullscreenControls != null) fullscreenControls.setVisibility(View.GONE);
+    };
     private float cursorX;
     private float cursorY;
     private GestureDetector mouseGestureDetector;
@@ -186,8 +196,15 @@ public final class MainActivity extends Activity {
                 view.setFocusableInTouchMode(true);
                 view.setOnTouchListener((videoView, event) -> {
                     mouseGestureDetector.onTouchEvent(event);
+                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+                            || event.getActionMasked() == MotionEvent.ACTION_MOVE
+                            || event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE) {
+                        showFullscreenControls();
+                    }
                     return false;
                 });
+                createFullscreenControls(decor);
+                showFullscreenControls();
                 view.requestFocus();
             }
             @Override public void onHideCustomView() {
@@ -501,6 +518,10 @@ public final class MainActivity extends Activity {
     private void hideCustomVideo() {
         if (customVideoView == null) return;
         FrameLayout decor = (FrameLayout) getWindow().getDecorView();
+        controlsHandler.removeCallbacks(hideControls);
+        if (fullscreenControls != null) decor.removeView(fullscreenControls);
+        fullscreenControls = null;
+        fullscreenPlayButton = null;
         decor.removeView(customVideoView);
         customVideoView = null;
         findViewById(android.R.id.content).setVisibility(View.VISIBLE);
@@ -509,6 +530,53 @@ public final class MainActivity extends Activity {
         applyImmersiveMode(fullScreen);
         applyUserZoom();
         webView.requestFocus();
+    }
+
+    private void createFullscreenControls(FrameLayout decor) {
+        fullscreenControls = new LinearLayout(this);
+        fullscreenControls.setOrientation(LinearLayout.HORIZONTAL);
+        fullscreenControls.setGravity(Gravity.CENTER);
+        fullscreenControls.setPadding(24, 18, 24, 18);
+        fullscreenControls.setBackgroundColor(0xDD0B1220);
+
+        Button rewind = makeVideoButton("−10s", v -> { seekVideo(-10); showFullscreenControls(); });
+        fullscreenPlayButton = makeVideoButton("Play / Pause", v -> {
+            toggleVideoPlayback();
+            showFullscreenControls();
+        });
+        Button forward = makeVideoButton("+10s", v -> { seekVideo(10); showFullscreenControls(); });
+        Button exit = makeVideoButton("Exit", v -> hideCustomVideo());
+        fullscreenControls.addView(rewind);
+        fullscreenControls.addView(fullscreenPlayButton);
+        fullscreenControls.addView(forward);
+        fullscreenControls.addView(exit);
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        decor.addView(fullscreenControls, params);
+    }
+
+    private Button makeVideoButton(String label, View.OnClickListener listener) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextSize(18);
+        button.setAllCaps(false);
+        button.setFocusable(true);
+        button.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        params.setMargins(10, 0, 10, 0);
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private void showFullscreenControls() {
+        if (fullscreenControls == null) return;
+        fullscreenControls.setVisibility(View.VISIBLE);
+        fullscreenControls.bringToFront();
+        controlsHandler.removeCallbacks(hideControls);
+        controlsHandler.postDelayed(hideControls, 5000);
     }
 
     private void toggleVideoPlayback() {
@@ -634,25 +702,40 @@ public final class MainActivity extends Activity {
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (customVideoView != null) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
+                        || event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN
+                        || event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT
+                        || event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT
+                        || event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER
+                        || event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                    if (fullscreenControls == null || fullscreenControls.getVisibility() != View.VISIBLE) {
+                        showFullscreenControls();
+                        if (fullscreenPlayButton != null) fullscreenPlayButton.requestFocus();
+                        return true;
+                    }
+                    showFullscreenControls();
+                    return super.dispatchKeyEvent(event);
+                }
                 switch (event.getKeyCode()) {
-                    case KeyEvent.KEYCODE_DPAD_CENTER:
-                    case KeyEvent.KEYCODE_ENTER:
                     case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                         toggleVideoPlayback();
+                        showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_PLAY:
                         webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.play()})()", null);
+                        showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_PAUSE:
                         webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.pause()})()", null);
+                        showFullscreenControls();
                         return true;
-                    case KeyEvent.KEYCODE_DPAD_LEFT:
                     case KeyEvent.KEYCODE_MEDIA_REWIND:
                         seekVideo(-10);
+                        showFullscreenControls();
                         return true;
-                    case KeyEvent.KEYCODE_DPAD_RIGHT:
                     case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
                         seekVideo(10);
+                        showFullscreenControls();
                         return true;
                 }
             }
