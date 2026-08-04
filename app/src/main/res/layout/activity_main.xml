@@ -10,7 +10,8 @@
         <Button android:id="@+id/forwardButton" style="@style/ToolbarButton" android:text="@string/forward" />
         <Button android:id="@+id/homeButton" style="@style/ToolbarButton" android:text="@string/home" />
         <EditText android:id="@+id/addressBar" android:layout_width="0dp" android:layout_height="52dp"
-            android:layout_marginHorizontal="8dp" android:layout_weight="1" android:background="@drawable/address_background"
+            android:layout_marginLeft="8dp" android:layout_marginRight="8dp"
+            android:layout_weight="1" android:background="@drawable/address_background"
             android:hint="@string/address_hint" android:imeOptions="actionGo" android:inputType="textUri"
             android:paddingHorizontal="16dp" android:singleLine="true" android:textColor="#111827" android:textColorHint="#64748B" />
         <Button android:id="@+id/clearButton" style="@style/ToolbarButton"

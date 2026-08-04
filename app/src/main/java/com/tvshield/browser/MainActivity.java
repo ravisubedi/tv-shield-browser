@@ -2,6 +2,8 @@ package com.tvshield.browser;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -61,8 +63,18 @@ public final class MainActivity extends Activity {
     private Button fullscreenPlayButton;
     private WebChromeClient.CustomViewCallback customVideoCallback;
     private final Handler controlsHandler = new Handler(Looper.getMainLooper());
-    private final Runnable hideControls = () -> {
-        if (fullscreenControls != null) fullscreenControls.setVisibility(View.GONE);
+    private final Runnable hideControls = new Runnable() {
+        @Override public void run() {
+            if (fullscreenControls == null) return;
+            LinearLayout controls = fullscreenControls;
+            controls.setClickable(false);
+            controls.animate().cancel();
+            controls.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+                if (fullscreenControls != controls) return;
+                controls.setVisibility(View.GONE);
+                if (customVideoView != null) customVideoView.requestFocus();
+            }).start();
+        }
     };
     private float cursorX;
     private float cursorY;
@@ -90,10 +102,10 @@ public final class MainActivity extends Activity {
         updateZoomLabel();
 
         mouseGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onDown(MotionEvent event) { return false; }
+            @Override public boolean onDown(MotionEvent event) { return true; }
             @Override public boolean onDoubleTap(MotionEvent event) {
                 if (customVideoView != null) hideCustomVideo();
-                else toggleFullScreen();
+                else requestVideoFullscreen();
                 return true;
             }
         });
@@ -151,7 +163,11 @@ public final class MainActivity extends Activity {
             }
             return false;
         });
-        if (state == null) webView.loadUrl(HOME); else webView.restoreState(state);
+        if (state == null) {
+            String launchUrl = getIntent().getDataString();
+            webView.loadUrl(launchUrl != null && (launchUrl.startsWith("https://")
+                    || launchUrl.startsWith("http://")) ? launchUrl : HOME);
+        } else webView.restoreState(state);
     }
 
     private void configureWebView() {
@@ -205,7 +221,10 @@ public final class MainActivity extends Activity {
                 });
                 createFullscreenControls(decor);
                 showFullscreenControls();
-                view.requestFocus();
+                if (fullscreenPlayButton != null) {
+                    fullscreenPlayButton.post(() -> fullscreenPlayButton.requestFocus());
+                }
+                updatePlayButtonLabel();
             }
             @Override public void onHideCustomView() {
                 hideCustomVideo();
@@ -228,12 +247,14 @@ public final class MainActivity extends Activity {
                 if (destinationType != AdBlocker.BlockType.NONE) {
                     recordBlock(destinationType);
                     Toast.makeText(MainActivity.this, "Shield blocked an ad link", Toast.LENGTH_SHORT).show();
+                    restoreDisplayedAddress(view);
                     return true;
                 }
                 Uri current = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
                 if (!isCrossSite(current, destination) || request.hasGesture()) return false;
                 recordBlock(AdBlocker.BlockType.AD);
                 Toast.makeText(MainActivity.this, "Shield blocked an automatic redirect", Toast.LENGTH_SHORT).show();
+                restoreDisplayedAddress(view);
                 return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -250,19 +271,27 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                if (!addressEditing) addressBar.setText(HOME.equals(url) ? "" : url);
+                if (!addressEditing) addressBar.setText(isHomeUrl(url) ? "" : url);
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!addressEditing) addressBar.setText(HOME.equals(url) ? "" : url);
-                if (!HOME.equals(url)) recordVisit(url, view.getTitle());
+                if (!addressEditing) addressBar.setText(isHomeUrl(url) ? "" : url);
+                if (!isHomeUrl(url)) recordVisit(url, view.getTitle());
                 updateBookmarkButton(url);
-                if (HOME.equals(url)) renderHomeData();
+                if (isHomeUrl(url)) renderHomeData();
                 applyResolutionViewport(url);
                 applyUserZoom();
                 installTvFocusStyle();
                 installShieldHelpers();
                 installYouTubeHelpers(url);
             }
+        });
+    }
+
+    private void restoreDisplayedAddress(WebView view) {
+        view.post(() -> {
+            if (addressEditing) return;
+            String currentUrl = view.getUrl();
+            addressBar.setText(isHomeUrl(currentUrl) ? "" : currentUrl);
         });
     }
 
@@ -288,6 +317,10 @@ public final class MainActivity extends Activity {
     private JSONArray readBookmarks() {
         try { return new JSONArray(browserData.getString("bookmarks", "[]")); }
         catch (Exception ignored) { return new JSONArray(); }
+    }
+
+    private boolean isHomeUrl(String url) {
+        return url != null && url.startsWith(HOME);
     }
 
     private void toggleBookmark() {
@@ -347,7 +380,19 @@ public final class MainActivity extends Activity {
             item.put("count", item.optInt("count", 0) + 1);
             item.put("last", System.currentTimeMillis());
             visits.put(host, item);
-            browserData.edit().putString("visits", visits.toString()).apply();
+            JSONArray oldHistory = new JSONArray(browserData.getString("history", "[]"));
+            JSONArray newHistory = new JSONArray();
+            JSONObject historyItem = new JSONObject();
+            historyItem.put("url", url);
+            historyItem.put("title", safeTitle(title, url));
+            historyItem.put("last", System.currentTimeMillis());
+            newHistory.put(historyItem);
+            for (int i = 0; i < oldHistory.length() && newHistory.length() < 50; i++) {
+                JSONObject old = oldHistory.optJSONObject(i);
+                if (old != null && !url.equals(old.optString("url"))) newHistory.put(old);
+            }
+            browserData.edit().putString("visits", visits.toString())
+                    .putString("history", newHistory.toString()).apply();
         } catch (Exception ignored) { }
     }
 
@@ -370,6 +415,20 @@ public final class MainActivity extends Activity {
         return result;
     }
 
+    private JSONArray recentHistory() {
+        try {
+            JSONArray source = new JSONArray(browserData.getString("history", "[]"));
+            JSONArray result = new JSONArray();
+            for (int i = 0; i < Math.min(10, source.length()); i++) {
+                JSONObject item = source.optJSONObject(i);
+                if (item != null) result.put(item);
+            }
+            return result;
+        } catch (Exception ignored) {
+            return new JSONArray();
+        }
+    }
+
     private String safeTitle(String title, String url) {
         if (title != null && !title.trim().isEmpty()) return title.trim();
         String host = Uri.parse(url).getHost();
@@ -380,7 +439,8 @@ public final class MainActivity extends Activity {
         String stats = "{ads:" + browserData.getLong("blocked_ads", 0)
                 + ",trackers:" + browserData.getLong("blocked_trackers", 0) + "}";
         String script = "renderBrowserData(" + readBookmarks().toString() + ","
-                + mostVisited().toString() + "," + stats + ")";
+                + mostVisited().toString() + "," + stats + ","
+                + recentHistory().toString() + ")";
         webView.evaluateJavascript(script, null);
     }
 
@@ -483,10 +543,12 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 1, 0, shieldEnabled ? "Shield ON" : "Shield OFF");
         menu.getMenu().add(0, 2, 1, "Zoom: " + pageZoom + "%");
         menu.getMenu().add(0, 3, 2, fullScreen ? "Exit Full Screen" : "Full Screen");
+        menu.getMenu().add(0, 4, 3, "History");
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) toggleShield();
             else if (item.getItemId() == 2) showZoomMenu();
             else if (item.getItemId() == 3) toggleFullScreen();
+            else if (item.getItemId() == 4) webView.loadUrl(HOME + "#historySection");
             return true;
         });
         menu.show();
@@ -536,15 +598,31 @@ public final class MainActivity extends Activity {
         fullscreenControls = new LinearLayout(this);
         fullscreenControls.setOrientation(LinearLayout.HORIZONTAL);
         fullscreenControls.setGravity(Gravity.CENTER);
-        fullscreenControls.setPadding(24, 18, 24, 18);
-        fullscreenControls.setBackgroundColor(0xDD0B1220);
+        fullscreenControls.setPadding(dp(18), dp(12), dp(18), dp(12));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xE60B1220);
+        background.setCornerRadius(dp(22));
+        fullscreenControls.setBackground(background);
+        fullscreenControls.setOnGenericMotionListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE) showFullscreenControls();
+            return false;
+        });
+        fullscreenControls.setOnTouchListener((view, event) -> {
+            showFullscreenControls();
+            return false;
+        });
 
-        Button rewind = makeVideoButton("−10s", v -> { seekVideo(-10); showFullscreenControls(); });
+        Button rewind = makeVideoButton("−10s", v -> {
+            seekVideo(-10); showFullscreenControls();
+        });
         fullscreenPlayButton = makeVideoButton("Play / Pause", v -> {
             toggleVideoPlayback();
             showFullscreenControls();
         });
-        Button forward = makeVideoButton("+10s", v -> { seekVideo(10); showFullscreenControls(); });
+        fullscreenPlayButton.setMinWidth(dp(210));
+        Button forward = makeVideoButton("+10s", v -> {
+            seekVideo(10); showFullscreenControls();
+        });
         Button exit = makeVideoButton("Exit", v -> hideCustomVideo());
         fullscreenControls.addView(rewind);
         fullscreenControls.addView(fullscreenPlayButton);
@@ -552,8 +630,10 @@ public final class MainActivity extends Activity {
         fullscreenControls.addView(exit);
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        // Sit just above common player timelines without covering the picture center.
+        params.setMargins(dp(48), 0, dp(48), dp(72));
         decor.addView(fullscreenControls, params);
     }
 
@@ -561,33 +641,112 @@ public final class MainActivity extends Activity {
         Button button = new Button(this);
         button.setText(label);
         button.setTextSize(18);
+        button.setTextColor(0xFFFFFFFF);
         button.setAllCaps(false);
         button.setFocusable(true);
+        button.setMinWidth(dp(130));
+        button.setMinHeight(dp(58));
+        button.setBackgroundResource(R.drawable.focus_button);
+        button.setBackgroundTintList(null);
         button.setOnClickListener(listener);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        params.setMargins(10, 0, 10, 0);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(dp(6), 0, dp(6), 0);
         button.setLayoutParams(params);
         return button;
     }
 
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private void showFullscreenControls() {
         if (fullscreenControls == null) return;
+        fullscreenControls.animate().cancel();
+        fullscreenControls.setAlpha(1f);
+        fullscreenControls.setClickable(true);
         fullscreenControls.setVisibility(View.VISIBLE);
         fullscreenControls.bringToFront();
         controlsHandler.removeCallbacks(hideControls);
-        controlsHandler.postDelayed(hideControls, 5000);
+        controlsHandler.postDelayed(hideControls, 3000);
     }
 
     private void toggleVideoPlayback() {
-        webView.evaluateJavascript("(function(){var v=document.querySelector('video');" +
-                "if(!v)return;if(v.paused)v.play();else v.pause()})()", null);
+        webView.evaluateJavascript("(function(){var a=Array.from(document.querySelectorAll('video'));" +
+                "var v=a.find(function(x){return !x.paused&&x.readyState>1})||" +
+                "a.find(function(x){return x.offsetWidth>0&&x.offsetHeight>0})||a[0];" +
+                "if(!v)return false;if(v.paused)v.play();else v.pause();return true})()", result -> {
+            if (!"true".equals(result)) sendEmbeddedPlayerKey(
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+            controlsHandler.postDelayed(this::updatePlayButtonLabel, 250);
+        });
+    }
+
+    private void updatePlayButtonLabel() {
+        if (fullscreenPlayButton == null) return;
+        webView.evaluateJavascript("(function(){var a=Array.from(document.querySelectorAll('video'));" +
+                "var v=a.find(function(x){return !x.paused&&x.readyState>1})||" +
+                "a.find(function(x){return x.offsetWidth>0&&x.offsetHeight>0})||a[0];" +
+                "return v?v.paused:null})()", result -> {
+            if (fullscreenPlayButton == null) return;
+            if ("true".equals(result)) fullscreenPlayButton.setText("Play");
+            else if ("false".equals(result)) fullscreenPlayButton.setText("Pause");
+            else fullscreenPlayButton.setText("Play / Pause");
+        });
+    }
+
+    private void sendVideoMediaKey(int keyCode) {
+        long now = android.os.SystemClock.uptimeMillis();
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0);
+        KeyEvent up = new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0);
+        boolean handled = customVideoView != null && customVideoView.dispatchKeyEvent(down);
+        if (customVideoView != null) customVideoView.dispatchKeyEvent(up);
+        if (!handled) {
+            AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            audio.dispatchMediaKeyEvent(down);
+            audio.dispatchMediaKeyEvent(up);
+        }
+    }
+
+    private void sendEmbeddedPlayerKey(int navigationKey, int mediaKey) {
+        // Cross-origin iframe videos cannot be controlled by main-frame JavaScript.
+        // Give their fullscreen player the same remote key a viewer would press,
+        // then fall back to the Android media session when it declines the event.
+        if (!dispatchKeyToCustomVideo(navigationKey)) sendVideoMediaKey(mediaKey);
+    }
+
+    private boolean dispatchKeyToCustomVideo(int keyCode) {
+        if (customVideoView == null) return false;
+        long now = android.os.SystemClock.uptimeMillis();
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0);
+        KeyEvent up = new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0);
+        boolean handled = customVideoView.dispatchKeyEvent(down);
+        customVideoView.dispatchKeyEvent(up);
+        return handled;
+    }
+
+    private void requestVideoFullscreen() {
+        String script = "(function(){var b=document.querySelector('.vjs-fullscreen-control," +
+                ".jw-icon-fullscreen,.plyr__control[data-plyr=fullscreen],.fp-fullscreen," +
+                ".ytp-fullscreen-button,[aria-label*=\\\"fullscreen\\\" i]');" +
+                "if(b){b.click();return true}var v=document.querySelector('video');" +
+                "if(v&&v.requestFullscreen){v.requestFullscreen();return true}" +
+                "return false})()";
+        webView.evaluateJavascript(script, result -> {
+            if (!"true".equals(result)) toggleFullScreen();
+        });
     }
 
     private void seekVideo(int seconds) {
-        webView.evaluateJavascript("(function(){var v=document.querySelector('video');" +
-                "if(!v)return;v.currentTime=Math.max(0,Math.min(v.duration||Infinity,v.currentTime+"
-                + seconds + "))})()", null);
+        webView.evaluateJavascript("(function(){var a=Array.from(document.querySelectorAll('video'));" +
+                "var v=a.find(function(x){return !x.paused&&x.readyState>1})||" +
+                "a.find(function(x){return x.offsetWidth>0&&x.offsetHeight>0})||a[0];" +
+                "if(!v)return false;v.currentTime=Math.max(0,Math.min(v.duration||Infinity,v.currentTime+"
+                + seconds + "));return true})()", result -> {
+            if (!"true".equals(result)) sendEmbeddedPlayerKey(
+                    seconds < 0 ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT,
+                    seconds < 0 ? KeyEvent.KEYCODE_MEDIA_REWIND : KeyEvent.KEYCODE_MEDIA_FAST_FORWARD);
+        });
     }
 
     private void installTvFocusStyle() {
@@ -713,28 +872,32 @@ public final class MainActivity extends Activity {
                         if (fullscreenPlayButton != null) fullscreenPlayButton.requestFocus();
                         return true;
                     }
+                    if (fullscreenControls.findFocus() == null) {
+                        if (fullscreenPlayButton != null) fullscreenPlayButton.requestFocus();
+                        return true;
+                    }
                     showFullscreenControls();
                     return super.dispatchKeyEvent(event);
                 }
                 switch (event.getKeyCode()) {
                     case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                        toggleVideoPlayback();
+                        sendVideoMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
                         showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_PLAY:
-                        webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.play()})()", null);
+                        sendVideoMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY);
                         showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_PAUSE:
-                        webView.evaluateJavascript("(function(){var v=document.querySelector('video');if(v)v.pause()})()", null);
+                        sendVideoMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE);
                         showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_REWIND:
-                        seekVideo(-10);
+                        sendVideoMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND);
                         showFullscreenControls();
                         return true;
                     case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
-                        seekVideo(10);
+                        sendVideoMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD);
                         showFullscreenControls();
                         return true;
                 }

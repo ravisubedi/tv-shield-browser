@@ -17,8 +17,8 @@ android {
         applicationId = "com.tvshield.browser"
         minSdk = 23
         targetSdk = 35
-        versionCode = 23
-        versionName = "0.2.12"
+        versionCode = 24
+        versionName = "0.2.13"
     }
 
     signingConfigs {

@@ -14,7 +14,7 @@
     a{display:flex;align-items:center;justify-content:center;height:80px;padding:12px;border-radius:16px;background:#1d2b42;color:#f8fafc;text-decoration:none;font-weight:700;border:3px solid transparent;box-shadow:inset 0 0 0 1px #2b3c57;overflow:hidden}
     a:focus-visible,input:focus-visible,button:focus-visible{outline:4px solid #fff;outline-offset:2px;border-color:#ff6a3d;box-shadow:0 0 0 5px #ff6a3d;transform:scale(1.03);transition:transform 120ms}
     a:hover{background:#263751}.dynamic:empty{display:none}.tile-wrap{position:relative;min-width:0}.tile-wrap a{padding-right:48px;text-align:center}.remove{position:absolute;right:8px;top:19px;width:48px;height:48px;padding:0;border-radius:12px;font-size:24px;background:#7f1d2d;color:white;z-index:2}
-    .count{display:block;font-size:17px;color:#afc0d6;margin-top:4px}.label{text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+    .count{display:block;font-size:17px;color:#afc0d6;margin-top:4px}.label{text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis}.empty{color:#afc0d6;margin:0 0 8px}
     @media(max-width:1599px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:1049px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
   </style>
 </head>
@@ -32,6 +32,7 @@
     <div class="stat"><span id="adsBlocked" class="stat-number">0</span><span class="stat-label">Ads blocked</span></div>
     <div class="stat"><span id="trackersBlocked" class="stat-number">0</span><span class="stat-label">Trackers blocked</span></div>
   </div></section>
+  <section id="historySection"><h2>Recent history</h2><p id="historyEmpty" class="empty">Pages you visit will appear here.</p><div id="recentHistory" class="grid dynamic"></div></section>
   <section id="bookmarksSection" hidden><h2>Bookmarks</h2><div id="bookmarks" class="grid dynamic"></div></section>
   <section id="visitedSection" hidden><h2>Most visited</h2><div id="mostVisited" class="grid dynamic"></div></section>
   <section><h2>Popular websites</h2>
@@ -53,7 +54,7 @@
       if(showCount){const c=document.createElement('span');c.className='count';c.textContent=item.count+' '+(item.count===1?'visit':'visits');label.appendChild(c)}
       a.appendChild(label); return a;
     }
-    function renderBrowserData(bookmarks, visited, stats) {
+    function renderBrowserData(bookmarks, visited, stats, history) {
       document.getElementById('adsBlocked').textContent=(stats&&stats.ads||0).toLocaleString();
       document.getElementById('trackersBlocked').textContent=(stats&&stats.trackers||0).toLocaleString();
       const b=document.getElementById('bookmarks'); b.replaceChildren();
@@ -63,6 +64,8 @@
       document.getElementById('bookmarksSection').hidden=!bookmarks.length;
       const v=document.getElementById('mostVisited'); v.replaceChildren();visited.forEach(item=>v.appendChild(makeLink(item,true)));
       document.getElementById('visitedSection').hidden=!visited.length;
+      const h=document.getElementById('recentHistory'); h.replaceChildren();history.forEach(item=>h.appendChild(makeLink(item,false)));
+      document.getElementById('historyEmpty').hidden=!!history.length;
     }
   </script>
 </body>
